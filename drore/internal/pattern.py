@@ -67,25 +67,30 @@ class Pattern:
         self._program = program
         self._groups = groups
 
-    def match(self, string: str, start_ind: int = 0) -> Optional[Match]:
+    def search(self, string: str, first_ind: int = 0, last_ind: Optional[int] = None) -> Optional[Match]:
+        if last_ind is None:
+            last_ind = len(string)
         context = ExecutionContext(string, self._program)
-        context.start_at(start_ind)
-        return self._run(context)
-
-    def search(self, string: str) -> Optional[Match]:
-        context = ExecutionContext(string, self._program)
-        for i in range(len(string), -1, -1):
+        for i in range(first_ind, last_ind + 1):
             context.start_at(i)
-        return self._run(context)
+            if matched_group := context.run():
+                return Match(matched_group, context.string, self._groups)
 
-    def _run(self, context: ExecutionContext) -> Optional[Match]:
-        if matched_group := context.run():
-            return Match(matched_group, context.string, self._groups)
+    def match(self, string: str, start_ind: int = 0) -> Optional[Match]:
+        return self.search(string, first_ind=start_ind, last_ind=start_ind)
 
     def finditer(self, string: str) -> Iterator[Match]:
-        for i in range(len(string) + 1):
-            if match := self.match(string, i):
-                yield match
+        ind = 0
+        while match := self.search(string, ind):
+            yield match
+            ind = match.span[0] + 1
 
     def findall(self, string: str) -> list[Match]:
         return list(self.finditer(string))
+
+    def split(self, string: str) -> Iterator[str]:
+        ind = 0
+        while match := self.search(string, ind):
+            print(match.span, repr(str(match)))
+            yield string[ind : match.span[0]]
+            ind = max(match.span[0] + 1, match.span[1])

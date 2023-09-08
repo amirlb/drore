@@ -38,3 +38,6 @@ def finditer(pattern: str, string: str) -> Iterator[Match]:
 
 def findall(pattern: str, string: str) -> list[Match]:
     return compile(pattern).findall(string)
+
+def split(pattern: str, string: str) -> Iterator[str]:
+    return compile(pattern).split(string)

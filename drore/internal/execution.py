@@ -83,7 +83,11 @@ Program = list[Operation]
 
 
 class ExecutionContext:
+    DEBUG = False
+
     def __init__(self, string: str, program: Program):
+        if self.DEBUG:
+            print(program)
         self.string = string
         self._program = program
         self._states: list[PartialMatch] = []
@@ -95,9 +99,13 @@ class ExecutionContext:
     def queue_state(self, state: PartialMatch) -> bool:
         inds = (state.ind, state.pc)
         if inds in self._visited:
+            if self.DEBUG:
+                print('already visited', inds)
             return False
         self._visited.add(inds)
         self._states.append(state)
+        if self.DEBUG:
+            print('queueing', inds)
         return True
 
     def already_visited(self, state: PartialMatch, ind_offset: int, pc_offset: int) -> bool:
@@ -107,9 +115,15 @@ class ExecutionContext:
     def run(self) -> Optional[ClosedGroupMatch]:
         while self._states:
             state = self._states.pop()
+            if self.DEBUG:
+                print('popped', (state.ind, state.pc))
             if state.pc == len(self._program):
+                if self.DEBUG:
+                    print('finalizing')
                 return state.finalize()
             instruction = self._program[state.pc]
+            if self.DEBUG:
+                print('executing', instruction)
             state.pc += 1
             instruction(self, state)
         return None
@@ -142,17 +156,38 @@ def op_assert_end(context: ExecutionContextProtocol, state: PartialMatch) -> Non
     if state.ind == len(context.string):
         context.queue_state(state)
 
-def op_split(offset: int) -> Operation:
-    def op(context: ExecutionContextProtocol, state: PartialMatch) -> None:
+def op_split(offset: int, prefer_jump: bool) -> Operation:
+    def op_prefer_jump(context: ExecutionContextProtocol, state: PartialMatch) -> None:
+        if ExecutionContext.DEBUG:
+            print('split: pushing default')
         if context.queue_state(state):
+            if ExecutionContext.DEBUG:
+                print('success')
+                print('checking offset', offset, 'at', (state.ind, state.pc + offset))
             if not context.already_visited(state, 0, offset):
                 state = state.clone()
                 state.pc += offset
+                if ExecutionContext.DEBUG:
+                    print('offset available')
+                    print('split: pushing offset')
                 context.queue_state(state)
         else:
+            if ExecutionContext.DEBUG:
+                print('failure')
+                print('split: pushing offset')
             state.pc += offset
             context.queue_state(state)
-    return op
+    def op_prefer_default(context: ExecutionContextProtocol, state: PartialMatch) -> None:
+        state.pc += offset
+        if context.queue_state(state):
+            if not context.already_visited(state, 0, -offset):
+                state = state.clone()
+                state.pc -= offset
+                context.queue_state(state)
+        else:
+            state.pc -= offset
+            context.queue_state(state)
+    return op_prefer_jump if prefer_jump else op_prefer_default
 
 def op_jump(offset: int) -> Operation:
     def op(context: ExecutionContextProtocol, state: PartialMatch) -> None:

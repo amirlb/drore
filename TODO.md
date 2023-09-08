@@ -4,4 +4,5 @@ To do:
   * Implement `[]`
   * Interesting examples
   * Implement `{}`
-  * Implement `Pattern.split` and `Pattern.sub`
+  * Implement `Pattern.sub`
+  * Proper NFA debugger
