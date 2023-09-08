@@ -1,4 +1,4 @@
-# DroRE - A better regular expression library for Python
+# DroRE: A better regular expression library for Python
 
 This library is largely compatible with the Python built-in `re` module,
 but with some improvements.
@@ -11,16 +11,18 @@ module only saves one value, whereas `drore` keeps all of them.
 
 For example,
 ```python
-    >>> m = re.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
-    >>> m.group(1)
-    '12'
-    >>> m.group(3)
-    '90'
+>>> m = re.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
+>>> m.group(1)
+'12'
+>>> m.group(3)
+'90'
 
-    >>> m = drore.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
-    >>> m.get(1), list(m.get_all(3))
-    ('12', ['34', '56', '78', '90'])
+>>> m = drore.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
+>>> m.get(1), list(m.get_all(3))
+('12', ['34', '56', '78', '90'])
 ```
+
+See also [test.py](test.py) for a multi-line example.
 
 ## No slow edge cases
 
@@ -28,7 +30,7 @@ The built-in `re` module uses a backtracking algorithm that results in
 exponential complexity on some inputs. For example,
 
 ```python
-    re.match(r'(a+)+b', 'a'*27 + 'c')
+re.match(r'(a+)+b', 'a'*27 + 'c')
 ```
 
 takes several seconds to reject. In contrast, `drore` compiles the expression
@@ -37,7 +39,7 @@ The NFA program is efficient to generate and always runs quickly. So the
 corresponding code
 
 ```python
-    drore.match(r'(a+)+b', 'a'*27 + 'c')
+drore.match(r'(a+)+b', 'a'*27 + 'c')
 ```
 
 takes less than a millisecond.
