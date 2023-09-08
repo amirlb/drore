@@ -62,11 +62,9 @@ class Compiler:
                 branches[j].append(op_jump(code_length))
                 code_length += len(branches[j])
             program: Program = []
-            code_length = len(branches[0])
-            for j in range(1, len(branches)):
-                # TODO: fix this, currently it prefers later alternatives over earlier ones
-                program.append(op_split(len(branches) - 1 - j + code_length, prefer_jump=False))
-                code_length += len(branches[j])
+            for j in range(len(branches) - 1, 0, -1):
+                code_length -= len(branches[j])
+                program.append(op_split(j - 1 + code_length, prefer_jump=False))
             for branch in branches:
                 program.extend(branch)
             return program
