@@ -149,7 +149,7 @@ class DebuggingContext:
     def queue_state(self, state: PartialMatch) -> bool:
         inds = (state.ind, state.pc)
         if inds in self._visited:
-            print(f"Already visited [ind={state.ind}, pc={state.pc}]")
+            print(f"Already visited {state}")
             return False
         self._visited.add(inds)
         self._states.append(state)
@@ -158,7 +158,7 @@ class DebuggingContext:
     def already_visited(self, state: PartialMatch, ind_offset: int, pc_offset: int) -> bool:
         inds = (state.ind + ind_offset, state.pc + pc_offset)
         if inds in self._visited:
-            print(f"Already visited [ind={state.ind}, pc={state.pc}]")
+            print(f"Already visited [ind={inds[0]} pc={inds[1]}]")
             return True
         else:
             return False
