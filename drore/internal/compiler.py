@@ -83,6 +83,9 @@ class Compiler:
         by order, since we first explore the split variation before continuing
         with the program fow.
         """
+        if len(branches) == 1:
+            return branches[0]
+
         jump_distance = 0
         for j in range(len(branches) - 2, -1, -1):
             jump_distance += len(branches[j + 1])
@@ -198,7 +201,7 @@ class Compiler:
                 self._ind = group_end + 1
                 return self._pattern[group_start : group_end]
             case ch:
-                raise ValueError(f"Invalid group decoration {ch!r} at position {self._ind}, only (:? and (:P are recognized")
+                raise ValueError(f"Invalid group decoration {ch!r} at position {self._ind}, only (?: and (?P are recognized")
 
     def _compile_escape(self) -> Program:
         match self._next():
