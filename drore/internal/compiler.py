@@ -64,7 +64,7 @@ class Compiler:
             program: Program = []
             for j in range(len(branches) - 1, 0, -1):
                 code_length -= len(branches[j])
-                program.append(op_split(j - 1 + code_length, prefer_jump=False))
+                program.append(op_split(j - 1 + code_length))
             for branch in branches:
                 program.extend(branch)
             return program
@@ -81,13 +81,13 @@ class Compiler:
             ch = self._peek()
             if ch == '?':
                 self._next()
-                program = [op_split(len(program), prefer_jump=False)] + program
+                program = [op_split(len(program))] + program
             elif ch == '+':
                 self._next()
-                program.append(op_split(-len(program) - 1, prefer_jump=True))
+                program.append(op_split(-len(program) - 1))
             elif ch == '*':
                 self._next()
-                program = [op_split(len(program) + 1, prefer_jump=False)] + program + [op_split(-len(program) - 1, prefer_jump=True)]
+                program = [op_split(len(program) + 1)] + program + [op_split(-len(program) - 1)]
             elif ch == '{':
                 raise RuntimeError("Sorry, {} is not implemented yet")
             else:

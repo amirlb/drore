@@ -19,7 +19,8 @@ from __future__ import annotations
 
 from typing import Iterator, NamedTuple, Optional, Union
 
-from drore.internal.execution import ClosedGroupMatch, DebugMode, DebuggingContext, ExecutionContext, Program
+from drore.internal.debugger import DebugMode, DebuggingContext
+from drore.internal.execution import ClosedGroupMatch, ExecutionContext, Program
 
 
 class GroupDescription(NamedTuple):
