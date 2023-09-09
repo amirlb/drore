@@ -22,10 +22,29 @@ from drore.internal.pattern import GroupDescription, Pattern
 
 
 class Compiler:
+    r"""
+    Converts from the regular expression syntax to a Program (list of Operation)
+    that implements the expression.
+
+    Goes by recursive descent, following the grammar
+        <expression>  ::=  <serial>  |  <serial> "|" <expression>
+        <serial>      ::=  ""  |  <single> <serial>
+        <single>      ::=  <atomic>  |  <single> <quantifier>
+        <quantifier>  ::=  "?"  |  "+"  |  "*"
+        <atomic>      ::=  ""  |  <group>  |  <escape>  |  "^"  |  "$"  |  <char>
+        <group>       ::=  "(" <group-mod> <expression> ")"
+        <group-mod>   ::=  ""  |  "?:"  |  "?P<" <name> ">"
+        <escape>      ::=  "\\"  |  "\n"  |  "\d"  |  "\s"  |  etc.
+
+    Program fragments are returned from the recursive descent parser directly
+    and combined by higher-level rules. The operations are designed such that
+    no relocations are necessary while combining.
+    """
+
     def __init__(self, pattern: str):
         self._pattern = pattern
         self._ind = 0
-        self._groups: list[GroupDescription] = [GroupDescription('', (0, len(pattern)))]
+        self._groups: list[GroupDescription] = [GroupDescription("", (0, len(pattern)))]
 
     @classmethod
     def compile(cls, pattern: str) -> Pattern:
@@ -54,20 +73,27 @@ class Compiler:
         while self._peek() == '|':
             self._next()
             branches.append(self._compile_serial())
-        if len(branches) == 1:
-            return branches[0]
-        else:
-            code_length = len(branches[-1])
-            for j in range(len(branches) - 2, -1, -1):
-                branches[j].append(op_jump(code_length))
-                code_length += len(branches[j])
-            program: Program = []
-            for j in range(len(branches) - 1, 0, -1):
-                code_length -= len(branches[j])
-                program.append(op_split(j - 1 + code_length))
-            for branch in branches:
-                program.extend(branch)
-            return program
+        return self._compose_alternatives(branches)
+
+    @staticmethod
+    def _compose_alternatives(branches: list[Program]) -> Program:
+        """
+        Add jumps at the ends of all branches but the last, and add splits
+        in the beginning to go to all branches. The first splits go to later
+        branches so the earlier branches will be higher on the stack and
+        explored earlier.
+        """
+        code_length = len(branches[-1])
+        for j in range(len(branches) - 2, -1, -1):
+            branches[j].append(op_jump(code_length))
+            code_length += len(branches[j])
+        program: Program = []
+        for j in range(len(branches) - 1, 0, -1):
+            code_length -= len(branches[j])
+            program.append(op_split(j - 1 + code_length))
+        for branch in branches:
+            program.extend(branch)
+        return program
 
     def _compile_serial(self) -> Program:
         program: Program = []
@@ -78,160 +104,164 @@ class Compiler:
     def _compile_single(self) -> Program:
         program = self._compile_atomic()
         while True:
-            ch = self._peek()
-            if ch == '?':
-                self._next()
-                program = [op_split(len(program))] + program
-            elif ch == '+':
-                self._next()
-                program.append(op_split(-len(program) - 1))
-            elif ch == '*':
-                self._next()
-                program = [op_split(len(program) + 1)] + program + [op_split(-len(program) - 1)]
-            elif ch == '{':
-                raise RuntimeError("Sorry, {} is not implemented yet")
-            else:
-                break
-        return program
+            match self._peek():
+                case '?':
+                    self._next()
+                    program = [op_split(len(program))] + program
+                case '+':
+                    self._next()
+                    program.append(op_split(-len(program) - 1))
+                case '*':
+                    self._next()
+                    # * is the same as +?
+                    program.append(op_split(-len(program) - 1))
+                    program = [op_split(len(program))] + program
+                case '{':
+                    raise RuntimeError("Sorry, {} is not implemented yet")
+                case _:
+                    return program
 
     def _compile_atomic(self) -> Program:
-        ch = self._next()
-        if ch is None:
-            return []
-        elif ch == '.':
-            return [op_any]  # TODO: should this be [^\n] instead?
-        elif ch in '?+*':
-            raise ValueError(f"Operator without argument: the {ch} at position {self._ind}) doesn't follow a sub-pattern")
-        elif ch == '|':
-            raise RuntimeError(f"Cannot parse regular expression: error 2 at position {self._ind}")
-        elif ch == '\\':
-            return self._compile_escape()
-        elif ch == '^':
-            return [op_assert_start]
-        elif ch == '$':
-            return [op_assert_end]
-        elif ch == '[':
-            raise RuntimeError("Sorry, [] is not implemented yet")
-        elif ch == ']':
-            raise ValueError(f"Mismatched brackets: unexpected ] at position {self._ind})")
-        elif ch == '(':
-            return self._compile_parens()
-        elif ch == ')':
-            raise ValueError(f"Mismatched parens: unexpected ) at position {self._ind})")
-        else:
-            return [op_char(ch)]
+        match ch := self._next():
+            case None:
+                return []
+            case '.':
+                return [op_any]  # TODO: should this be [^\n] instead?
+            case '?' | '+' | '*':
+                raise ValueError(f"Operator without argument: the {ch} at position {self._ind}) doesn't follow a sub-pattern")
+            case '|':
+                raise RuntimeError(f"Cannot parse regular expression: error 2 at position {self._ind}")
+            case '\\':
+                return self._compile_escape()
+            case '^':
+                return [op_assert_start]
+            case '$':
+                return [op_assert_end]
+            case '[':
+                raise RuntimeError("Sorry, [] is not implemented yet")
+            case ']':
+                raise ValueError(f"Mismatched brackets: unexpected ] at position {self._ind})")
+            case '(':
+                return self._compile_parens()
+            case ')':
+                raise ValueError(f"Mismatched parens: unexpected ) at position {self._ind})")
+            case _:
+                return [op_char(ch)]
 
     def _compile_parens(self) -> Program:
         if self._peek() == ')':
             raise ValueError(f"Empty parenthesis at position {self._ind}")
-        group_name = ''
-        if self._peek() == '?':
-            self._next()
-            ch = self._next()
-            if ch is None:
-                raise ValueError(f"Mismatched parens: the ( at position {self._ind - 1}) is never closed")
-            elif ch == ':':
-                start_ind = self._ind - 2
-                program = self._compile_expression()
-                ch = self._next()
-                if ch is None:
-                    raise ValueError(f"Mismatched parens: the ( at position {start_ind} is never closed")
-                if ch != ')':
-                    raise RuntimeError(f"Cannot parse regular expression: error 3 at position {self._ind}")
-                return program
-            elif ch == 'P':
-                group_name = self._read_group_name()
-            else:
-                raise ValueError(f"Invalid group decoration at position {self._ind}, only (:? and (:P are recognized")
         group_id = len(self._groups)
         start_ind = self._ind
-        self._groups.append(GroupDescription(group_name, (start_ind, start_ind)))
+        group_name = self._read_group_name()
+        if group_name is not None:
+            # Occupy the group ID while we compile the inner expression
+            self._groups.append(GroupDescription(group_name, (start_ind, start_ind)))
         program = self._compile_expression()
         ch = self._next()
         if ch is None:
             raise ValueError(f"Mismatched parens: the ( at position {start_ind} is never closed")
         if ch != ')':
-            raise RuntimeError(f"Cannot parse regular expression: error 4 at position {self._ind}")
-        self._groups[group_id] = GroupDescription(group_name, (start_ind, self._ind - 1))
-        program = [op_start_group(group_id)] + program + [op_end_group]
+            raise RuntimeError(f"Cannot parse regular expression: error 3 at position {self._ind}")
+        if group_name is not None:
+            self._groups[group_id] = GroupDescription(group_name, (start_ind, self._ind - 1))
+            program = [op_start_group(group_id)] + program + [op_end_group]
         return program
 
-    def _read_group_name(self) -> str:
-        if self._next() != '<':
-            raise ValueError(f"Expected group name in <angle brackets> in position {self._ind}")
-        group_start = self._ind
-        group_end = self._pattern.find('>', self._ind)
-        if group_end == -1:
-            raise ValueError(f"Group name at position {group_start} doesn't have a closing bracket")
-        self._ind = group_end + 1
-        return self._pattern[group_start : group_end]
+    def _read_group_name(self) -> Optional[str]:
+        """
+        Called right after an open paren. Returns an empty string for
+        normal groups, None if the group should not produce captures,
+        and a non-empty string for named groups.
+        """
+
+        if self._peek() != '?':
+            return ""
+        self._next()
+
+        match self._next():
+            case None:
+                raise ValueError(f"Mismatched parens: the ( at position {self._ind - 1}) is never closed")
+            case ':':
+                return None
+            case 'P':
+                if self._next() != '<':
+                    raise ValueError(f"Expected group name in <angle brackets> in position {self._ind}")
+                group_start = self._ind
+                group_end = self._pattern.find('>', self._ind)
+                if group_end == -1:
+                    raise ValueError(f"Group name at position {group_start} doesn't have a closing bracket")
+                self._ind = group_end + 1
+                return self._pattern[group_start : group_end]
+            case ch:
+                raise ValueError(f"Invalid group decoration {ch!r} at position {self._ind}, only (:? and (:P are recognized")
 
     def _compile_escape(self) -> Program:
-        ch = self._next()
-        if ch is None:
-            raise ValueError(f"Invalid escape sequence at position {self._ind}: \\ cannot be the last thing in the pattern")
-        elif ch == 'A':
-            return [op_assert_start]
-        elif ch == 'Z':
-            return [op_assert_end]
-        elif ch == 'd':
-            return [op_filter(str.isdigit, "\\d")]
-        elif ch == 'D':
-            return [op_filter(lambda ch: not str.isdigit(ch), "\\D")]
-        elif ch == 's':
-            return [op_filter(str.isspace, "\\s")]
-        elif ch == 'S':
-            return [op_filter(lambda ch: not str.isspace(ch), "\\S")]
-        elif ch == 'w':
-            return [op_filter(lambda ch: ch == '_' or str.isalnum(ch), "\\w")]
-        elif ch == 'W':
-            return [op_filter(lambda ch: ch != '_' and not str.isalnum(ch), "\\W")]
-        elif ch == 'n':
-            return [op_char('\n')]
-        elif ch == 't':
-            return [op_char('\t')]
-        elif ch == 'r':
-            return [op_char('\r')]
-        elif ch == '0':
-            return [op_char('\0')]
-        elif ch == '\\':
-            return [op_char('\\')]
-        elif ch == '[':
-            return [op_char('[')]
-        elif ch == ']':
-            return [op_char(']')]
-        elif ch == '(':
-            return [op_char('(')]
-        elif ch == ')':
-            return [op_char(')')]
-        elif ch == '{':
-            return [op_char('{')]
-        elif ch == '}':
-            return [op_char('}')]
-        elif ch == '?':
-            return [op_char('?')]
-        elif ch == '+':
-            return [op_char('+')]
-        elif ch == '*':
-            return [op_char('*')]
-        elif ch == '|':
-            return [op_char('|')]
-        elif ch == '.':
-            return [op_char('.')]
-        elif ch == '^':
-            return [op_char('^')]
-        elif ch == '$':
-            return [op_char('$')]
-        elif ch == 'x':
-            start_ind = self._ind - 1
-            d1 = self._next()
-            d2 = self._next()
-            if d1 is None or d2 is None:
-                raise ValueError(f"Escape sequence at position {start_ind} is cut in the middle")
-            if d1 not in '0123456789abcdef':
-                raise ValueError(f"Invalid escape sequence at position {start_ind}: the character {d1!r} is not a hex digit")
-            if d2 not in '0123456789abcdef':
-                raise ValueError(f"Invalid escape sequence at position {start_ind}: the character {d2!r} is not a hex digit")
-            return [op_char(chr(int(d1 + d2, 16)))]
-        else:
-            raise ValueError(f"Unrecognized escape sequence at position {self._ind - 1}")
+        match self._next():
+            case None:
+                raise ValueError(f"Invalid escape sequence at position {self._ind}: \\ cannot be the last thing in the pattern")
+            case 'A':
+                return [op_assert_start]
+            case 'Z':
+                return [op_assert_end]
+            case 'd':
+                return [op_filter(str.isdigit, "\\d")]
+            case 'D':
+                return [op_filter(lambda ch: not str.isdigit(ch), "\\D")]
+            case 's':
+                return [op_filter(str.isspace, "\\s")]
+            case 'S':
+                return [op_filter(lambda ch: not str.isspace(ch), "\\S")]
+            case 'w':
+                return [op_filter(lambda ch: ch == '_' or str.isalnum(ch), "\\w")]
+            case 'W':
+                return [op_filter(lambda ch: ch != '_' and not str.isalnum(ch), "\\W")]
+            case 'n':
+                return [op_char('\n')]
+            case 't':
+                return [op_char('\t')]
+            case 'r':
+                return [op_char('\r')]
+            case '0':
+                return [op_char('\0')]
+            case '\\':
+                return [op_char('\\')]
+            case '[':
+                return [op_char('[')]
+            case ']':
+                return [op_char(']')]
+            case '(':
+                return [op_char('(')]
+            case ')':
+                return [op_char(')')]
+            case '{':
+                return [op_char('{')]
+            case '}':
+                return [op_char('}')]
+            case '?':
+                return [op_char('?')]
+            case '+':
+                return [op_char('+')]
+            case '*':
+                return [op_char('*')]
+            case '|':
+                return [op_char('|')]
+            case '.':
+                return [op_char('.')]
+            case '^':
+                return [op_char('^')]
+            case '$':
+                return [op_char('$')]
+            case 'x':
+                start_ind = self._ind - 1
+                d1 = self._next()
+                d2 = self._next()
+                if d1 is None or d2 is None:
+                    raise ValueError(f"Escape sequence at position {start_ind} is cut in the middle")
+                if d1 not in '0123456789abcdef':
+                    raise ValueError(f"Invalid escape sequence at position {start_ind}: the character {d1!r} is not a hex digit")
+                if d2 not in '0123456789abcdef':
+                    raise ValueError(f"Invalid escape sequence at position {start_ind}: the character {d2!r} is not a hex digit")
+                return [op_char(chr(int(d1 + d2, 16)))]
+            case _:
+                raise ValueError(f"Unrecognized escape sequence at position {self._ind - 1}")
