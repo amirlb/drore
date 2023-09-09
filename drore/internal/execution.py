@@ -163,9 +163,8 @@ def op_assert_end(context: ExecutionContextProtocol, state: PartialMatch) -> Non
 
 
 def op_split(offset: int) -> Operation:
-
     @op_name(f"split {offset} (prefer jump)")
-    def op_prefer_jump(context: ExecutionContextProtocol, state: PartialMatch) -> None:
+    def op(context: ExecutionContextProtocol, state: PartialMatch) -> None:
         if context.queue_state(state):
             if not context.already_visited(state, 0, offset):
                 state = state.clone()
@@ -174,9 +173,12 @@ def op_split(offset: int) -> Operation:
         else:
             state.pc += offset
             context.queue_state(state)
+    return op
 
+
+def op_split_after(offset: int) -> Operation:
     @op_name(f"split {offset} (prefer default)")
-    def op_prefer_default(context: ExecutionContextProtocol, state: PartialMatch) -> None:
+    def op(context: ExecutionContextProtocol, state: PartialMatch) -> None:
         state.pc += offset
         if context.queue_state(state):
             if not context.already_visited(state, 0, -offset):
@@ -186,8 +188,7 @@ def op_split(offset: int) -> Operation:
         else:
             state.pc -= offset
             context.queue_state(state)
-
-    return op_prefer_jump if offset < 0 else op_prefer_default
+    return op
 
 
 def op_jump(offset: int) -> Operation:

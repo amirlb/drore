@@ -17,7 +17,7 @@
 
 from typing import Optional
 
-from drore.internal.execution import Program, op_any, op_assert_end, op_assert_start, op_char, op_end_group, op_filter, op_jump, op_split, op_start_group
+from drore.internal.execution import Program, op_any, op_assert_end, op_assert_start, op_char, op_end_group, op_filter, op_jump, op_split, op_split_after, op_start_group
 from drore.internal.pattern import GroupDescription, Pattern
 
 
@@ -79,18 +79,22 @@ class Compiler:
     def _compose_alternatives(branches: list[Program]) -> Program:
         """
         Add jumps at the ends of all branches but the last, and add splits
-        in the beginning to go to all branches. The first splits go to later
-        branches so the earlier branches will be higher on the stack and
-        explored earlier.
+        in the beginning to go to all branches. The splits go to the branches
+        by order, since we first explore the split variation before continuing
+        with the program fow.
         """
-        code_length = len(branches[-1])
+        jump_distance = 0
         for j in range(len(branches) - 2, -1, -1):
-            branches[j].append(op_jump(code_length))
-            code_length += len(branches[j])
+            jump_distance += len(branches[j + 1])
+            branches[j].append(op_jump(jump_distance))
+
         program: Program = []
-        for j in range(len(branches) - 1, 0, -1):
-            code_length -= len(branches[j])
-            program.append(op_split(j - 1 + code_length))
+        jump_distance = 0
+        for j in range(len(branches) - 1):
+            program.append(op_split(len(branches) - 1 - j + jump_distance))
+            jump_distance += len(branches[j])
+        program.append(op_jump(jump_distance))
+
         for branch in branches:
             program.extend(branch)
         return program
@@ -107,7 +111,7 @@ class Compiler:
             match self._peek():
                 case '?':
                     self._next()
-                    program = [op_split(len(program))] + program
+                    program = [op_split_after(len(program))] + program
                 case '+':
                     self._next()
                     program.append(op_split(-len(program) - 1))
@@ -115,7 +119,7 @@ class Compiler:
                     self._next()
                     # * is the same as +?
                     program.append(op_split(-len(program) - 1))
-                    program = [op_split(len(program))] + program
+                    program = [op_split_after(len(program))] + program
                 case '{':
                     raise RuntimeError("Sorry, {} is not implemented yet")
                 case _:
