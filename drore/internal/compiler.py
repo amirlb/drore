@@ -32,7 +32,7 @@ class Compiler:
         compiler = cls(pattern)
         program = compiler._compile_expression()
         compiler._assert_at_end_of_pattern()
-        return Pattern(program, compiler._groups)
+        return Pattern(program, pattern, compiler._groups)
 
     def _peek(self) -> Optional[str]:
         if self._ind == len(self._pattern):
@@ -175,17 +175,17 @@ class Compiler:
         elif ch == 'Z':
             return [op_assert_end]
         elif ch == 'd':
-            return [op_filter(str.isdigit)]
+            return [op_filter(str.isdigit, "\\d")]
         elif ch == 'D':
-            return [op_filter(lambda ch: not str.isdigit(ch))]
+            return [op_filter(lambda ch: not str.isdigit(ch), "\\D")]
         elif ch == 's':
-            return [op_filter(str.isspace)]
+            return [op_filter(str.isspace, "\\s")]
         elif ch == 'S':
-            return [op_filter(lambda ch: not str.isspace(ch))]
+            return [op_filter(lambda ch: not str.isspace(ch), "\\S")]
         elif ch == 'w':
-            return [op_filter(lambda ch: ch == '_' or str.isalnum(ch))]
+            return [op_filter(lambda ch: ch == '_' or str.isalnum(ch), "\\w")]
         elif ch == 'W':
-            return [op_filter(lambda ch: ch != '_' and not str.isalnum(ch))]
+            return [op_filter(lambda ch: ch != '_' and not str.isalnum(ch), "\\W")]
         elif ch == 'n':
             return [op_char('\n')]
         elif ch == 't':

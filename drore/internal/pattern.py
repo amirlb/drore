@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Iterator, NamedTuple, Optional, Union
 
-from drore.internal.execution import ClosedGroupMatch, ExecutionContext, Program
+from drore.internal.execution import ClosedGroupMatch, DebugMode, DebuggingContext, ExecutionContext, Program
 
 
 class GroupDescription(NamedTuple):
@@ -63,14 +63,18 @@ class Match:
 
 
 class Pattern:
-    def __init__(self, program: Program, groups: list[GroupDescription]):
+    def __init__(self, program: Program, pattern_str: str, groups: list[GroupDescription]):
         self._program = program
+        self.pattern_str = pattern_str
         self._groups = groups
 
     def search(self, string: str, first_ind: int = 0, last_ind: Optional[int] = None) -> Optional[Match]:
         if last_ind is None:
             last_ind = len(string)
-        context = ExecutionContext(string, self._program)
+        if DebugMode.active:
+            context = DebuggingContext(string, self._program)
+        else:
+            context = ExecutionContext(string, self._program)
         for i in range(first_ind, last_ind + 1):
             context.start_at(i)
             if matched_group := context.run():

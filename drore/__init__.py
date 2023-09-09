@@ -18,6 +18,7 @@
 import functools
 from typing import Iterator, Optional
 
+from drore.internal.execution import DebugMode
 from drore.internal.pattern import Match, Pattern
 
 
