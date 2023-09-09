@@ -22,7 +22,7 @@ For example,
 ('12', ['34', '56', '78', '90'])
 ```
 
-See also [examples/parsing](examples/parsing.py) for a multi-line example.
+See also [examples/parsing.py](examples/parsing.py) for a multi-line example.
 
 ## No slow edge cases
 
