@@ -11,13 +11,13 @@ module only saves one value, whereas `drore` keeps all of them.
 
 For example,
 ```python
->>> m = re.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
+>>> m = re.match(r'(\d+)(,(\d+))*', '12,34,56,78,90')
 >>> m.group(1)
 '12'
 >>> m.group(3)
 '90'
 
->>> m = drore.match(r'^(\d+)(,(\d+))*$', '12,34,56,78,90')
+>>> m = drore.match(r'(\d+)(,(\d+))*', '12,34,56,78,90')
 >>> m.get(1), list(m.get_all(3))
 ('12', ['34', '56', '78', '90'])
 ```
